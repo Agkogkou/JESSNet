@@ -78,7 +78,8 @@ def run_monoscale_jessnet(obs_maps, obs_maps_masked, galmask, beam_model, ns, K_
 # --------------------------------------------------------------------------
 def run_multiscale_hard(Xlm, Xlm_masked, bl, th, nnside, ell_edges, lup, tau=0.1, num_pca=4,
                         ns=5, K_max=0.9, c_wu=1e-2, nscales=5, n_jobs_conv=5,
-                        overlap_sdec=20, galmask=None, Xlm_masked_pca=None, dynamic_overlap=False):
+                        overlap_sdec=20, galmask=None, Xlm_masked_pca=None, dynamic_overlap=False,
+                        minWuIt=100):
     """Multiscale PCA + JESSNet with hard top-hat ell bins.
 
     If `Xlm_masked_pca` is given, the PCA block trains on it (a less aggressive
@@ -122,7 +123,8 @@ def run_multiscale_hard(Xlm, Xlm_masked, bl, th, nnside, ell_edges, lup, tau=0.1
 
         print(f"Running JESSNet on ell=[{ell_min},{ell_max}) with {len(ch_idx)} channels")
         A_sdec, S_sdec = run_jessnet(temp_alm_block, None, galmask, bl[ch_idx], ns=ns, K_max=K_max,
-                                     c_wu=c_wu, nscales=nscales, alm_in=True, wt_input=True)
+                                     c_wu=c_wu, nscales=nscales, alm_in=True, wt_input=True,
+                                     minWuIt=minWuIt)
 
         frg_rec = hpyt.convolve_parallel(A_sdec @ S_sdec, th[ch_idx], ell_max, n_jobs=n_jobs_conv)
         frg_rec_lm = hpyt.map2alm(frg_rec, lmax=lmax)
@@ -141,7 +143,7 @@ def run_multiscale_windowed(Xlm, Xlm_masked, bl, th, nnside, windows, pca_window
                             channel_selection='weighted', num_pca=4, ns=5, K_max=0.9, c_wu=1e-2,
                             nscales_sdec=5, n_jobs_conv=5, galmask=None,
                             filter_threshold=1e-6, renormalize_available_windows=False,
-                            Xlm_masked_pca=None):
+                            Xlm_masked_pca=None, minWuIt=100):
     """Multiscale PCA + JESSNet with smooth (cosine/wavelet) windows.
 
     Each scale is X_j = W_j(ell) X; the cleaned scale is added to Rlm (analysis
@@ -196,7 +198,7 @@ def run_multiscale_windowed(Xlm, Xlm_masked, bl, th, nnside, windows, pca_window
             Xj_block[:, active] = Xlm_actual[np.ix_(ch_idx, active)] * W_lm[active][None, :]
             A_sdec, S_sdec = run_jessnet(Xj_block, None, galmask, bl[ch_idx], ns=ns, K_max=K_max,
                                          c_wu=c_wu, nscales=nscales_sdec,
-                                         alm_in=True, wt_input=True)
+                                         alm_in=True, wt_input=True, minWuIt=minWuIt)
             frg_rec = hpyt.convolve_parallel(A_sdec @ S_sdec, th[ch_idx], ell_max_eff, n_jobs=n_jobs_conv)
             frg_rec_lm = hpyt.map2alm(frg_rec, lmax=lmax)
             rec_j = np.zeros_like(Xj_orig)
