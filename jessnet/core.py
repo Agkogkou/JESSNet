@@ -33,6 +33,18 @@ from .learnlet import Learnlet
 PROFILE = False        # print a per-section timing breakdown after run()
 PARALLEL_SHT = True    # transform the n sources concurrently (threads)
 
+
+def _default_device():
+    """cuda > mps (Apple Silicon) > cpu. The learnlet forward pass dominates
+    JESSNet's runtime, so MPS is a large (~20x measured) speedup over CPU on
+    Apple Silicon and is worth preferring over CPU when no CUDA GPU exists."""
+    if torch.cuda.is_available():
+        return 'cuda'
+    if getattr(torch.backends, 'mps', None) is not None and torch.backends.mps.is_available():
+        return 'mps'
+    return 'cpu'
+
+
 # ---- spherical-learnlet configuration (override before a run) -------------
 WEIGHT_PATH = 'weights/learnlet_sphere_64_5_sc5_fg.pth'
 LEARNLET_NSCALES = 5        # total spherical-wavelet scales = 1 coarse + (L-1) detail; must match the weights
@@ -214,7 +226,7 @@ class JESSNet:
         self.ca = None
         self.nmseScales = None
         self.aborted = False
-        self.device = torch.device(kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu'))
+        self.device = torch.device(kwargs.get('device', _default_device()))
 
         # caches (built lazily)
         self._Hl2_cache = None
