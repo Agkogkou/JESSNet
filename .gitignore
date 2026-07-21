@@ -1,0 +1,23 @@
+# Data / weights / outputs (distributed via Zenodo, see data/README.md and weights/README.md)
+data/*
+!data/README.md
+weights/*.pth
+outputs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Caches
+*.npz
+.cache/
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
