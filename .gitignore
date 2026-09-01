@@ -4,6 +4,9 @@ data/*
 weights/*.pth
 outputs/
 
+# Local-only tests (not published)
+tests/
+
 # Python
 __pycache__/
 *.py[cod]
