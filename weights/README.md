@@ -3,7 +3,7 @@
 The trained spherical-wavelet learnlet weights used in the paper are distributed
 via **Zenodo**:
 
-> **[ Zenodo DOI / link — TO BE ADDED ]**
+> [doi.org/10.5281/zenodo.20341922](https://doi.org/10.5281/zenodo.20341922)
 
 Place the file here:
 

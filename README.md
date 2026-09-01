@@ -25,17 +25,18 @@ cd JESSNet
 pip install -e .          # or: pip install -r requirements.txt
 ```
 
-Requires Python ≥ 3.9 and a CUDA-capable GPU for the learnlet step (`torch`).
+Requires Python ≥ 3.9. The learnlet step (`torch`) runs on CUDA or Apple Silicon
+(MPS) GPUs when available, and falls back to CPU otherwise.
 
 ## Data and weights (Zenodo)
 
 The input simulation, the mask/footprint files, and the trained learnlet weights
-are distributed via Zenodo (see `data/README.md` and `weights/README.md` for the
-links and expected layout):
+are distributed via Zenodo: [doi.org/10.5281/zenodo.20341922](https://doi.org/10.5281/zenodo.20341922)
+(see `data/README.md` and `weights/README.md` for the expected layout):
 
 ```
-data/    sim_*.hd5, sky_footprints/*.npy      # TO BE ADDED on Zenodo
-weights/ learnlet_sphere_64_5_sc5_fg.pth       # TO BE ADDED on Zenodo
+data/    sim_*.hd5, footprint_*.npy            # from Zenodo (doi.org/10.5281/zenodo.20341922)
+weights/ learnlet_sphere_64_5_sc5_fg.pth       # from Zenodo (doi.org/10.5281/zenodo.20341922)
 ```
 
 ## Quick start

@@ -40,7 +40,7 @@ from jessnet.pipeline import (run_monoscale_jessnet, run_multiscale_hard,
 # =====================================================================
 # --- paths (edit these) ---
 INPUT_FILE = 'data/sim_CoLoRe_1.0MHz_nside256_gaussian_oscillating.hd5'
-FOOTPRINTS_DIR = 'data/sky_footprints/'
+FOOTPRINTS_DIR = 'data/'
 OUTPUT_DIR = 'outputs/'
 CASE_NAME = 'jessnet_run'
 
