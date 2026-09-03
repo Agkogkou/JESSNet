@@ -142,7 +142,7 @@ def run_multiscale_hard(Xlm, Xlm_masked, bl, th, nnside, ell_edges, lup, tau=0.1
 def run_multiscale_windowed(Xlm, Xlm_masked, bl, th, nnside, windows, pca_window_ids, tau=0.1,
                             channel_selection='weighted', num_pca=4, ns=5, K_max=0.9, c_wu=1e-2,
                             nscales_sdec=5, n_jobs_conv=5, galmask=None,
-                            filter_threshold=1e-6, renormalize_available_windows=False,
+                            filter_threshold=3e-2, renormalize_available_windows=False,
                             Xlm_masked_pca=None, minWuIt=100):
     """Multiscale PCA + JESSNet with smooth (cosine/wavelet) windows.
 

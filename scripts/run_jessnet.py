@@ -80,8 +80,6 @@ core.PROFILE = False           # True -> print a per-section timing breakdown
 # footprint-specific overrides (applied automatically when mask_galactic_plane==1)
 if mask_galactic_plane == 1:
     sigma_mask = 3
-    ns_PCA = 3
-    lup = 250
 
 # =====================================================================
 def main():

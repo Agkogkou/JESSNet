@@ -69,6 +69,53 @@ The same trained weights work for **both** full-sky and footprint runs: each
 source is normalized to unit variance over the observed region before the
 learnlet, matching the unit-variance normalization used at training time.
 
+## Parameters to reproduce the results of Gkogkou et al. (2026)
+
+The `CONFIG` block in `scripts/run_jessnet.py` already ships with these
+values; this section is a quick reference. Full-sky and footprint runs share
+almost every setting — only two differ.
+
+**Differs between full-sky and footprint:**
+
+| parameter | full-sky | footprint |
+|---|---|---|
+| `mask_galactic_plane` | `0` | `1` |
+| `sigma_mask` | `5` | `3` |
+
+**Shared:**
+
+| parameter | value |
+|---|---|
+| `nnside` | `256` |
+| `lup` | `256` (= `nnside`) |
+| `bright_mask` | `True` |
+| `strategy_mask` | `1` (wavelet masking) |
+| `degraded` | `False` |
+| `oscillating` | `True` |
+| `beam` | `0` (Gaussian) |
+| `window_mode` | `'cosine'` |
+| `ell_edges` | `[20, 100]` |
+| `taper_width` | `10` |
+| `channel_selection` | `'weighted'` |
+| `tau` | `0.1` |
+| `ns_PCA` | `4` |
+| `ns_JESSNet` | `5` |
+| `K_max` | `0.6` |
+| `c_wu` | `1e-2` |
+| `renormalize_available_windows` | `False` |
+| `core.LEARNLET_NSCALES` | `5` |
+| `core.LEARNLET_NSIDE_CUT` | `4` |
+| `core.LEARNLET_K` | `0.5` |
+| `core.LEARNLET_BATCH_SIZE` | `400` |
+
+One value lives outside the `CONFIG` block, as a function default in
+`jessnet/pipeline.py`'s `run_multiscale_windowed`: **`filter_threshold =
+3e-2`**. It bounds how far into its own cosine-taper tail a window still
+takes responsibility for cleaning before handing that multipole range off to
+the neighboring window, which by construction has most of the weight there.
+The shipped default already matches this value, so no action is needed unless
+you call `run_multiscale_windowed` directly with an explicit override.
+
 ## Library use
 
 ```python
