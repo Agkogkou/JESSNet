@@ -41,6 +41,9 @@ from jessnet.pipeline import (run_monoscale_jessnet, run_multiscale_hard,
 # --- paths (edit these) ---
 INPUT_FILE = 'data/sim_CoLoRe_1.0MHz_nside256_gaussian_oscillating.hd5'
 FOOTPRINTS_DIR = 'data/'
+FOOTPRINT_NAME = 'footprint_intermediate_plus_Planck70'  # base name; expected files are
+                                                          # {FOOTPRINT_NAME}_nside{nnside}_apodized.npy
+                                                          # and _apodized_shrunk.npy (only used if mask_galactic_plane=1)
 OUTPUT_DIR = 'outputs/'
 CASE_NAME = 'jessnet_run'
 
@@ -120,7 +123,7 @@ def main():
 
     # --- galactic mask / footprint ---
     if mask_galactic_plane == 1:
-        galmask = np.load(FOOTPRINTS_DIR + f'footprint_intermediate_plus_Planck70_nside{nnside}_apodized.npy',
+        galmask = np.load(FOOTPRINTS_DIR + f'{FOOTPRINT_NAME}_nside{nnside}_apodized.npy',
                           allow_pickle=True)
     else:
         galmask = np.ones(obs_maps.shape[1], dtype=bool)
@@ -217,7 +220,7 @@ def main():
 
     else:
         print('Computing footprint (masked) power spectra ...')
-        mask_dict = np.load(FOOTPRINTS_DIR + f'footprint_intermediate_plus_Planck70_nside{nnside}_apodized_shrunk.npy',
+        mask_dict = np.load(FOOTPRINTS_DIR + f'{FOOTPRINT_NAME}_nside{nnside}_apodized_shrunk.npy',
                             allow_pickle=True).item()
         masks = [mask_dict[key] for key in mask_dict]
         names = list(mask_dict.keys())
