@@ -99,9 +99,20 @@ def main():
     print(f'{len(freqs)} channels, {min(freqs)}-{max(freqs)} MHz, d_nu={freqs[1]-freqs[0]} MHz')
 
     obs_maps = np.array(file['Obs_conv_noise'])
-    obs_maps -= np.mean(obs_maps, axis=1, keepdims=True)
     hi_signal_smoothed = np.array(file['HI_conv_noise'])
-    hi_signal_smoothed -= np.mean(hi_signal_smoothed, axis=1, keepdims=True)
+
+    # --- galactic mask / footprint (loaded early: the mean subtraction below needs it) ---
+    if mask_galactic_plane == 1:
+        galmask = np.load(FOOTPRINTS_DIR + f'{FOOTPRINT_NAME}_nside{nnside}_apodized.npy',
+                          allow_pickle=True)
+    else:
+        galmask = np.ones(obs_maps.shape[1], dtype=bool)
+
+    # subtract the per-channel mean: full sky if mask_galactic_plane=0,
+    # footprint only if mask_galactic_plane=1
+    mean_mask = galmask != 0
+    obs_maps -= np.mean(obs_maps[:, mean_mask], axis=1, keepdims=True)
+    hi_signal_smoothed -= np.mean(hi_signal_smoothed[:, mean_mask], axis=1, keepdims=True)
 
     # --- beam model ---
     th, ell_beam_model, bl = beams.gen_beam_model(degraded, oscillating, freqs, nnside, A_beam=0.5, T_beam=20)
@@ -121,12 +132,6 @@ def main():
         obs_maps_masked = None
         obs_maps_masked_pca = None
 
-    # --- galactic mask / footprint ---
-    if mask_galactic_plane == 1:
-        galmask = np.load(FOOTPRINTS_DIR + f'{FOOTPRINT_NAME}_nside{nnside}_apodized.npy',
-                          allow_pickle=True)
-    else:
-        galmask = np.ones(obs_maps.shape[1], dtype=bool)
     lmax = 3 * nnside
 
     # --- harmonic transforms ---
