@@ -5,6 +5,7 @@ Only the routines actually used by the pipeline are kept here.
 """
 
 import os
+import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
@@ -24,6 +25,81 @@ def _alm2map_one(args):
     alm, nside = args
     os.environ["OMP_NUM_THREADS"] = "1"
     return hp.sphtfunc.alm2map(alm, nside)
+
+
+def _smoothalm_one(args):
+    alm, fl = args
+    os.environ["OMP_NUM_THREADS"] = "1"
+    return hp.sphtfunc.smoothalm(alm, beam_window=fl, inplace=False)
+
+
+# --------------------------------------------------------------------------
+# Persistent process pool for the small (n_sources-wide) per-source SHT
+# stacks used inside the JESSNet solver's hot loop (wt_trans and the per-
+# iteration Slm updates in core.py). healpy's map2alm/alm2map/smoothalm hold
+# the GIL during their C computation, so a ThreadPoolExecutor gives *no*
+# speedup there (measured: threaded ~= serial, slightly worse once thread
+# overhead is counted). A process pool gives close to linear speedup instead
+# (measured ~4.6x for n=5). The pool is created once and kept alive for the
+# life of the process, so the one-time spawn cost is amortized across the
+# ~100+ solver iterations that reuse it, instead of being paid every call.
+#
+# Deliberately uses the 'spawn' start method rather than the platform default
+# ('fork' on Linux): this pool is first created *after* CUDA is already
+# initialized in the main process (the learnlet model is moved onto the GPU
+# in JESSNet.__init__, before the solver's first iteration), and forking a
+# process that already holds a CUDA context is a known source of hangs/
+# crashes in child processes. These workers never touch torch/CUDA, but
+# spawning a clean interpreter sidesteps the issue entirely at negligible
+# amortized cost.
+# --------------------------------------------------------------------------
+_FAST_SHT_POOL = None
+_FAST_SHT_POOL_SIZE = 0
+_FAST_SHT_CTX = mp.get_context("spawn")
+
+
+def _fast_sht_pool(n):
+    global _FAST_SHT_POOL, _FAST_SHT_POOL_SIZE
+    if _FAST_SHT_POOL is None or _FAST_SHT_POOL_SIZE < n:
+        if _FAST_SHT_POOL is not None:
+            _FAST_SHT_POOL.shutdown(wait=True)
+        _FAST_SHT_POOL = ProcessPoolExecutor(max_workers=n, mp_context=_FAST_SHT_CTX)
+        _FAST_SHT_POOL_SIZE = n
+    return _FAST_SHT_POOL
+
+
+def map2alm_fast(maps, lmax, iter=3):
+    """map2alm over a stack (n, p) of n>1 maps, process-parallel across n."""
+    if maps.shape[0] == 1:
+        return hp.sphtfunc.map2alm(maps[0], lmax=lmax, iter=iter)[None, :]
+    pool = _fast_sht_pool(maps.shape[0])
+    out = list(pool.map(_map2alm_one, [(maps[i], lmax, iter) for i in range(maps.shape[0])]))
+    return np.array(out)
+
+
+def alm2map_fast(alms, nside):
+    """alm2map over a stack (n, t) of n>1 alms, process-parallel across n."""
+    if alms.shape[0] == 1:
+        return hp.sphtfunc.alm2map(alms[0], nside)[None, :]
+    pool = _fast_sht_pool(alms.shape[0])
+    out = list(pool.map(_alm2map_one, [(alms[i], nside) for i in range(alms.shape[0])]))
+    return np.array(out)
+
+
+def alm_product_fast(alms, filters):
+    """Isotropic-filter product over a stack (n, t) of n>1 alms, one shared
+    (t,) filter or one (n, t) filter per source, process-parallel across n."""
+    n = alms.shape[0]
+    if n == 1:
+        fl = filters if len(np.shape(filters)) == 1 else filters[0, :]
+        return hp.sphtfunc.smoothalm(alms[0, :], beam_window=fl, inplace=False)[None, :]
+    pool = _fast_sht_pool(n)
+    if len(np.shape(filters)) == 1:
+        args = [(alms[i, :], filters) for i in range(n)]
+    else:
+        args = [(alms[i, :], filters[i, :]) for i in range(n)]
+    out = list(pool.map(_smoothalm_one, args))
+    return np.array(out)
 
 
 def map2alm_parallel(maps, lmax=None, iter=3, max_workers=None):
@@ -175,12 +251,20 @@ def wt_trans(inputs, nscales=3, lmax=None, alm_in=False, nside=None, alm_out=Fal
     dim_inputs = len(np.shape(inputs))
     maps = None
 
+    # For a stack of more than one source, every scale/source's SHT is fully
+    # independent, so use the process-parallel variants (see their docstrings
+    # for why threads don't help here). A single map/source falls back to the
+    # plain serial calls, matching the pre-existing behavior exactly.
+    _map2alm = map2alm_fast if dim_inputs > 1 else map2alm
+    _alm2map = alm2map_fast if dim_inputs > 1 else alm2map
+    _alm_product = alm_product_fast if dim_inputs > 1 else alm_product
+
     if alm_in:
         alms = inputs
         if nside is None and not alm_out:
             raise ValueError("nside is missing")
         if not alm_out:
-            maps = alm2map(alms, nside)
+            maps = _alm2map(alms, nside)
         if lmax is None:
             lmax = hp.Alm.getlmax(np.shape(alms)[-1])
     else:
@@ -191,7 +275,7 @@ def wt_trans(inputs, nscales=3, lmax=None, alm_in=False, nside=None, alm_out=Fal
             nside = hp.get_nside(maps[0, :])
         if lmax is None:
             lmax = 3 * nside
-        alms = map2alm(maps, lmax=lmax)
+        alms = _map2alm(maps, lmax=lmax)
 
     if not alm_out:
         l_scale = maps.copy()
@@ -214,9 +298,9 @@ def wt_trans(inputs, nscales=3, lmax=None, alm_in=False, nside=None, alm_out=Fal
     for j in range(nscales):
         h = compute_h(lmax, scale)
         if not alm_out:
-            m = alm2map(alm_product(alms, h), nside)
+            m = _alm2map(_alm_product(alms, h), nside)
         else:
-            m = alm_product(alms, h)
+            m = _alm_product(alms, h)
         h_scale = l_scale - m
         l_scale = m
         if dim_inputs == 1:

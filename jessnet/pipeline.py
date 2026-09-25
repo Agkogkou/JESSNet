@@ -150,6 +150,18 @@ def run_multiscale_windowed(Xlm, Xlm_masked, bl, th, nnside, windows, pca_window
     by W_j, synthesis by summation). `pca_window_ids` are the window indices
     cleaned with PCA (the coarse/large-scale window). `Xlm_masked_pca`, if given,
     is the (less aggressively) masked dataset used to train the PCA window(s).
+
+    `filter_threshold` bounds how far into a window's own cosine-taper tail it
+    still takes responsibility for cleaning. Near a window's own edge, W_j(ell)
+    shrinks the per-window input amplitude far below the solver's noise floor
+    (MAD-based hard thresholding in the learnlet step), so the per-window
+    source/foreground estimate collapses to zero there -- while the raw,
+    still foreground-dominated data (foregrounds run ~1e8-1e9x brighter than
+    HI in C_ell) is passed straight through uncleaned, producing a many-orders-
+    -of-magnitude leak concentrated at that ell. Because normalize_windows_sum
+    enforces sum_j W_j(ell) = 1, whatever weight this window gives up at its
+    tail is picked up by the neighboring window, which still has strong-enough
+    amplitude there to clean reliably.
     """
     lmax = hp.Alm.getlmax(Xlm.shape[1])
     ell, _ = hp.Alm.getlm(lmax)

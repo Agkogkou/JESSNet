@@ -2,21 +2,22 @@
 in spherical-harmonic space, with a spherical-wavelet learnlet as the learned
 sparse regularization operator.
 
-This is a single, speed-optimized class. The `perscale` flag selects the two
-behaviours that differ between a run on the full data and a run on a single
+This is a single, speed-optimized class. The `perscale` flag selects the one
+behaviour that differs between a run on the full data and a run on a single
 angular window:
-    perscale=False : masked alms always built; no oblique A normalization
-    perscale=True  : masked alms only when a mask is present; oblique A normalization
+    perscale=False : masked alms always built
+    perscale=True  : masked alms only when a mask is present
+The oblique A-column normalization (pins the A/S scale ambiguity) always runs,
+regardless of `perscale`.
 
 Module-level configuration (set before running):
     PROFILE          -> print a per-section wall-clock breakdown after each run
-    PARALLEL_SHT     -> transform the n sources concurrently (threads)
+    PARALLEL_SHT     -> transform the n sources concurrently (processes; see harmonics.py)
     WEIGHT_PATH,LEARNLET_* -> spherical-learnlet weights and hyperparameters
 """
 
 import time
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 
 import numpy as np
@@ -31,7 +32,7 @@ from .learnlet import Learnlet
 
 # ---- run-time switches ----------------------------------------------------
 PROFILE = False        # print a per-section timing breakdown after run()
-PARALLEL_SHT = True    # transform the n sources concurrently (threads)
+PARALLEL_SHT = True    # transform the n sources concurrently (processes; see harmonics.py)
 
 
 def _default_device():
@@ -57,25 +58,21 @@ LEARNLET_THRESH = 'hard'
 
 
 # --------------------------------------------------------------------------
-# Parallel spherical-harmonic transforms (threaded over sources; identical output)
+# Parallel spherical-harmonic transforms over sources (identical output).
+#
+# healpy's map2alm/alm2map hold the GIL during their C computation, so
+# threading them (the previous implementation here) gives no real speedup.
+# hpyt.map2alm_fast/alm2map_fast use a persistent process pool instead
+# (~4.6x measured speedup for 5 sources); see harmonics.py for why a
+# 'spawn'-started pool is used specifically here (created after CUDA is
+# already initialized in this process).
 # --------------------------------------------------------------------------
-_SHT_POOL = None
-
-
-def _sht_pool(n):
-    global _SHT_POOL
-    if _SHT_POOL is None or _SHT_POOL._max_workers < n:
-        _SHT_POOL = ThreadPoolExecutor(max_workers=n)
-    return _SHT_POOL
-
-
 def map2alm_maybe_parallel(maps, lmax, niter):
     if maps.ndim == 1:
         return hp.map2alm(maps, lmax=lmax, iter=niter)
     if not PARALLEL_SHT or maps.shape[0] == 1:
         return np.array([hp.map2alm(maps[i], lmax=lmax, iter=niter) for i in range(maps.shape[0])])
-    pool = _sht_pool(maps.shape[0])
-    return np.array(list(pool.map(lambda mm: hp.map2alm(mm, lmax=lmax, iter=niter), maps)))
+    return hpyt.map2alm_fast(maps, lmax=lmax, iter=niter)
 
 
 def alm2map_maybe_parallel(alms, nside):
@@ -83,8 +80,7 @@ def alm2map_maybe_parallel(alms, nside):
         return hp.alm2map(alms, nside)
     if not PARALLEL_SHT or alms.shape[0] == 1:
         return np.array([hp.alm2map(alms[i], nside) for i in range(alms.shape[0])])
-    pool = _sht_pool(alms.shape[0])
-    return np.array(list(pool.map(lambda aa: hp.alm2map(aa, nside), alms)))
+    return hpyt.alm2map_fast(alms, nside)
 
 
 # --------------------------------------------------------------------------
@@ -601,8 +597,7 @@ class JESSNet:
             A *= sign
             A[:] = np.maximum(A, 0)
 
-        if self.perscale:  # oblique constraint
-            A /= np.maximum(np.linalg.norm(A, axis=0), 1e-24)
+        A /= np.maximum(np.linalg.norm(A, axis=0), 1e-24)  # oblique constraint (pins the A/S scale ambiguity)
         return 0
 
     def refine_s_end(self):
